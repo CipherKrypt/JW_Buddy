@@ -88,6 +88,15 @@ class Portions():
             if chap == book.tChap:
                 completed.append(book.name)
         return completed[:-1] if bool(end[2])  else completed
+    
+    def latest(self):
+        p = self.portions[-1]
+        start = p.start
+        end = p.end
+        portion = f"Day {p.day} Portion:\n"
+        portion += f"{start[0].name} {start[1]}{f':{start[2]} ' if start[2] != 0 else ''}"
+        portion += f" {'- '+end[0].name if end[0] != start[0] else ''}{'- '+ str(end[1]) if end[1] != start[1] and end[0] == start[0] else ' '+ str(end[1]) if end[0] != start[0] else ''}{f':{int(end[2])}' if end[2] != 0  and  end[1] != start[1] else int(end[2]) if end[2] != 0 else ''}"
+        return portion
                 
 
 class DBR_AI():
@@ -118,11 +127,35 @@ class DBR_AI():
             self.curr_book = self.bible[self.curr_b] # Current book that is being read
             self._totalVerses = 0
             self._totalChapters = 0
+            self.tVerses = 0
+            self.tChapters = 0
+            self.tBooks = 0
             self._day = 0
             self.oldTestament = [929,23145]
             self.newTestament = [260,7956]
+            self._fileName = None
             self.fileName = fileName
             self.Portion = Portions()
+
+    def __str__(self) -> str:
+        return f"""Books Completed: {self.tBooks} Books
+Chapters Completed: {self.tChapters} Chapters
+Verses Completed: {self.tVerses} Verses
+Books Left: {66 - int(self.tBooks)} Books
+Chapters Left: {int(self.oldTestament[0]+ self.newTestament[0]) - int(self.tChapters)} Chapters
+Verses Left: {int(self.oldTestament[1]+ self.newTestament[1]) - int(self.tVerses)} Verses"""
+
+    @property
+    def fileName(self):
+        return self._fileName
+    
+    @fileName.setter
+    def fileName(self, value):
+        if value == None:
+            self.CSV = False
+        else:
+            self._fileName = value
+            self.CSV = True
             self.make_CSV()
 
     @property
@@ -131,6 +164,7 @@ class DBR_AI():
     
     @totalVerses.setter
     def totalVerses(self, new_value):
+        self.tVerses += int(new_value - self._totalVerses) if self._totalVerses != 0 else 0
         self._totalVerses = new_value
 
     @property
@@ -139,6 +173,7 @@ class DBR_AI():
     
     @totalChapters.setter
     def totalChapters(self, new_value):
+        self.tChapters += int(new_value - self._totalChapters) if self._totalChapters != 0 else 0
         self._totalChapters = new_value
 
     @property
@@ -167,18 +202,20 @@ class DBR_AI():
             # AC - Average Chapter read Day (Running average)
 
     def write(self, day:int): # Writes to the Schedule
-        with open(self.fileName + ".csv", "a", newline= "") as csvFile:
-            writer = csv.writer(csvFile)
+        
             self.totalVerses += self.verse 
             self.totalChapters += self.chaps
             AV = self.totalVerses / self.day
             AC = self.totalChapters / self.day
-            row = [f"Day {day}", self.portion, self.verse, self.chaps, round(AV, 2), round(AC, 2)]
-            writer.writerow(row)
-
+            if self.CSV:
+                with open(self.fileName + ".csv", "a", newline= "") as csvFile:
+                    writer = csv.writer(csvFile)
+                    row = [f"Day {day}", self.portion, self.verse, self.chaps, round(AV, 2), round(AC, 2)]
+                    writer.writerow(row)
             self.verse = 0
             self.chaps = 0
             self.portion = ""
+            return
 
     def next_day(self):
         # Increments the current day by one
@@ -201,6 +238,7 @@ class DBR_AI():
             self.curr_c = 1
             self.curr_v = 0
             self.curr_book = self.bible[self.curr_b]
+            self.tBooks += 1
             return True
         else:
             self.curr_c += 1
@@ -270,17 +308,19 @@ class DBR_AI():
                     return end
                 
 
-    def generate_schedule(self):
-        for day in range(1,366):
+    def generate_schedule(self, until:int = 366):
+        for day in range(1,until):
             self.portion = self.generate_portion()
             # P.day = day
             # print(P)
             self.write(day)
-
-        print(len(self.Portion))
-        with open (f"{self.fileName}.pickle", "wb") as file:
-            pickle.dump(self.Portion, file)
-        print(f"Schedule created as {self.fileName}.csv")
+        if self.CSV:
+            print(len(self.Portion))
+            with open (f"{self.fileName}.pickle", "wb") as file:
+                pickle.dump(self.Portion, file)
+            print(f"Schedule created as {self.fileName}.csv")
+        else:
+            return True
 
     def generate_portion(self):
         self.next_day()
@@ -304,12 +344,21 @@ def get_day():
     today = datetime.datetime.today().date()
     days = today - start_date
     return int(days.days+1)
+    
+
+    
 
 if __name__ == "__main__":
+
+    AI =  DBR_AI(fileName = None)
+    if AI.generate_schedule(until = int(23)+1):
+        print("D O N E")
+        print (AI.Portion.latest())
+        print (AI)
     # trial.newTestament()
     # trial.oldTestament()
     # AI = DBR_AI(fileName="DBR_Schedule")
-    Fam = DBR_AI(fileName="FamilyDBR")
+    # Fam = DBR_AI(fileName="FamilyDBR")
     # AI.curr_b = 39+23
     # AI.curr_c = 2
     # AI.curr_v = 0
@@ -324,14 +373,14 @@ if __name__ == "__main__":
     # Fam.day = 1
     # Fam.generate_schedule()
 
-    with open ("FamilyDBR.pickle", "rb") as file:
-        P = pickle.load(file)
-    import datetime
-    start_date = datetime.date(2024, 1, 1)
-    print(type(start_date))
-    today = datetime.datetime.today().date()
-    days = today - start_date
-    print(days.days+1)
+    # with open ("FamilyDBR.pickle", "rb") as file:
+    #     P = pickle.load(file)
+    # import datetime
+    # start_date = datetime.date(2024, 1, 1)
+    # print(type(start_date))
+    # today = datetime.datetime.today().date()
+    # days = today - start_date
+    # print(days.days+1)
 
 
 
