@@ -9,8 +9,12 @@ class ServiceUser():
         self.to_complete = []
         self.completed = False
         self.status = None
+        self.time = "05:00"
         self.waiting = (False,)
 
+    def __str__(self) -> str:
+        return f"UID: {self.UID}\nDay: {self.day}\nPortion: {self.portion_str}"
+    
     @property
     def day(self):
         return self._day
@@ -27,8 +31,9 @@ class ServiceUser():
                 except:
                     return False
             self.AI = DBR_AI(fileName = None)
-            self.AI.generate_schedule(int(value))
+            self.AI.generate_schedule(int(value)+1)
             self.portion_str = self.AI.Portion.latest()
+            print(self.portion_str)
             self.to_complete.append(int(value))
 
     def add(self, day):
@@ -49,6 +54,10 @@ class Users():
     def __getitem__(self, ID):
         ID: str = str(ID)
         return self.UsersD.get(ID)
+    
+    def __iter__(self) -> ServiceUser:
+        for Suser in self.UsersD:
+            yield self.UsersD[Suser]
 
     def add(self, user:ServiceUser) -> None:
         if user.status:
@@ -59,6 +68,8 @@ class Users():
 
     def update(self, user:ServiceUser):
         print(f"updated {user.UID.first_name}")
+        print(self.UsersD[str(user.UID.user_id)])
+        print(user)
         self.UsersD[str(user.UID.user_id)] = user
 
     def remove(self, uid) -> bool:
