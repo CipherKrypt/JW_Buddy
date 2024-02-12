@@ -7,6 +7,7 @@ import os
 import schedule
 import time
 import threading
+from pytz import timezone
 from dotenv import load_dotenv
 from telebot import types, TeleBot
 from telebot import *
@@ -32,8 +33,12 @@ def bot(fileName : str | None):
         with open("U.pickle", "wb") as file:
             pickle.dump(U, file)
     def U_load():
-        with open("U.pickle", "rb") as file:
-            return pickle.load(file)
+        try:
+            if U:
+                return U
+        except:
+            with open("U.pickle", "rb") as file:
+                return pickle.load(file)
         
     def read(fileName):
         with open(fileName + ".pickle", "rb") as file:
@@ -117,7 +122,15 @@ def bot(fileName : str | None):
 
     """ HANDLING '/' COMMANDS """
     @bot.message_handler(commands=['start'])
+    # Welcomes the user
     def start_message(message):
+        m = Message(message.json)
+        bot.send_message(m.chat.chat_id, f"Welcome {m.from_user.first_name}! We hope you will enjoy this Service. Please use the '/help' command to get started")
+
+
+    @bot.message_handler(commands=['today'])
+    # Sends the Portion for the day
+    def today(message):
         m = Message(message.json)
         p = AI[get_day()]
         start = p.start
@@ -140,6 +153,7 @@ def bot(fileName : str | None):
 
 
     @bot.message_handler(commands=['done'])
+    # Allows to user to mark their portion as completed
     def done_message(message):
         keyboard = types.InlineKeyboardMarkup()
         button = types.InlineKeyboardButton(
@@ -151,6 +165,7 @@ def bot(fileName : str | None):
         bot.send_message(m.chat.chat_id, 'Hello', reply_markup=keyboard)
 
     @bot.message_handler(commands=['boss'])
+    # This is for the boss to handle
     def boss(message):
         print("getting BOSS")
         m = Message(message.json)
@@ -169,6 +184,7 @@ def bot(fileName : str | None):
             bot.send_message(DB['BOSS'], "U R the B055!")
 
     @bot.message_handler(commands=['sub'])
+    # Command to register as a User
     def sub(message):
         m = Message(message.json)
         print(f"/sub message from {m.from_user.first_name}")
@@ -192,17 +208,28 @@ def bot(fileName : str | None):
                 print(err)
     
     @bot.message_handler(commands=['whoami'])
-    def whoami(message):
+    # For the user to know current status
+    def whoami(message): 
         m = Message(message.json)
         print(f"/whoami message from {m.from_user.first_name}")
         U = U_load()
         try:
-            user = User(m.from_user)
-            user.waiting = (True, "day")
-            U.add(user)
-            U_save(U)
-            print(f"added {m.from_user.first_name} as {m.from_user.user_id}")
-            bot.send_message(m.from_user.user_id, f"Welcome {user.UID.first_name}! Please enter the day from which you would like to continue your Portion Reminders")
+            if str(m.from_user.user_id) in U.keys():
+                user = U[str(m.from_user.user_id)]
+                print("Data of User\n", user)
+                day = user.AI.day
+                portion = user.portion_str
+                ch = user.AI.tChapters
+                due = len(user.to_complete)
+                chat = f"""Name: {m.from_user.first_name}
+Day: {day}
+Portion: {portion}
+Chapters completed: {ch} Chapters
+Due for completion: {due} Portions
+"""
+            else:
+                chat = 'You are not registered yet.\nUse /sub to register.'
+            bot.send_message(m.from_user.user_id, chat)
 
         except Exception as err:
             print(err)
@@ -213,7 +240,7 @@ def bot(fileName : str | None):
         print(f"echo message from {m.from_user.first_name}")
         text = m.text
         if text.startswith("/"):
-            if text.lstrip("/") in ["unsub", "today", "due", "done", "dt", "issue", "news"]:
+            if text.lstrip("/") in ["unsub", "today", "due", "done", "dt", "issue", "news", "help"]:
                 bot.send_message(m.from_user.user_id, f"Sorry, {text} command is under development. Developer is working hard to implement this feature. Stay tuned")
         try:
             if U:
@@ -255,13 +282,13 @@ def bot(fileName : str | None):
             except Exception as Err:
                 print(f"An Error occurred: {Err}")
     def jobs(bot):
+        print("Running Jobs")
         def bot_work(bot):
             print("STARTING")
             try:
-                with open("DB.pickle", "rb") as file:
+                with open("U.pickle", "rb") as file:
                     DB = pickle.load(file)
-                print(DB)
-                BOSS = DB["BOSS"]
+                print()
                 p = AI[get_day()]
                 start = p.start
                 end = p.end
@@ -269,23 +296,26 @@ def bot(fileName : str | None):
                 portion += f"{start[0].name} {start[1]}{f':{start[2]} ' if start[2] != 0 else ''}"
                 portion += f" {'- '+end[0].name if end[0] != start[0] else ''}{'- '+ str(end[1]) if end[1] != start[1] and end[0] == start[0] else ' '+ str(end[1]) if end[0] != start[0] else ''}{f':{int(end[2])}' if end[2] != 0  and  end[1] != start[1] else int(end[2]) if end[2] != 0 else ''}"
                 link = Links()
-                keyboard = types.InlineKeyboardMarkup()
                 for excerpt in p.portion:
                     book, chapter = excerpt
                     url = link.get_url(book.name, chapter)
-                    button = types.InlineKeyboardButton(
+                    url_button = types.InlineKeyboardButton(
                     f'{book.name} {chapter}', url=url)
-                    keyboard.add(button)
-                button = types.InlineKeyboardButton(
-                    'Done', callback_data=f'start_done_{m.chat.chat_id}')
-                keyboard.add(button)
-                bot.send_message(BOSS, portion, reply_markup=keyboard)
-            except:
-                pass
+
+                for Suser in DB:
+                    user = Suser.UID
+                    keyboard = types.InlineKeyboardMarkup()
+                    keyboard.add(url_button)
+                    Done_button = types.InlineKeyboardButton(
+                    'Done', callback_data=f'start_done_{user}')
+                    keyboard.add(Done_button)
+                    bot.send_message(user.user_id, portion, reply_markup=keyboard)
+            except Exception as Err:
+                print(f"Error: {Err} | at  bot_work")
             
             # Your task code here
-
-        schedule.every().day.do(bot_work, bot)
+        uae_tz = timezone('Asia/Dubai')
+        schedule.every().day.at("11:57","Asia/Dubai").do(bot_work, bot)
 
         while True:
             schedule.run_pending()
@@ -293,8 +323,9 @@ def bot(fileName : str | None):
 
     bot_thread = threading.Thread(target = poll)
     jobs_thread = threading.Thread(target= jobs, args= (bot,))
-    bot_thread.start()
     jobs_thread.start()
+    bot_thread.start()
+    
     print("threading began")
 
 ##############################################################
